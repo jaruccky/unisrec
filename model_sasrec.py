@@ -10,6 +10,7 @@ class SASRec(nn.Module):
         self.max_seq_len = max_seq_len
         self.item_embedding = nn.Embedding(num_items + 1, hidden_size, padding_idx=0)
         self.position_embedding = nn.Embedding(max_seq_len, hidden_size)
+        self.input_norm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout)
         self.layers = nn.ModuleList([
             nn.TransformerEncoderLayer(
@@ -29,7 +30,9 @@ class SASRec(nn.Module):
         bsz, seq_len, _ = item_embs.shape
         device = item_embs.device
         pos = torch.arange(seq_len, device=device).unsqueeze(0).expand(bsz, seq_len)
-        x = self.dropout(item_embs + self.position_embedding(pos))
+        x = item_embs + self.position_embedding(pos)
+        x = self.input_norm(x)
+        x = self.dropout(x)
         if item_seq_ids is None:
             key_padding_mask = None
             keep_mask = None

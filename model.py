@@ -6,25 +6,47 @@ from model_sasrec import SASRec
 
 
 class ParametricWhiteningExpert(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, dropout=0.0):
         super().__init__()
+        self.dropout = nn.Dropout(dropout)
         self.bias = nn.Parameter(torch.zeros(input_dim))
         self.linear = nn.Linear(input_dim, output_dim, bias=False)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=0.02)
 
     def forward(self, x):
-        return self.linear(x - self.bias)
+        return self.linear(self.dropout(x) - self.bias)
 
 
 class MoEAdaptor(nn.Module):
-    def __init__(self, input_dim, output_dim, num_experts):
+    def __init__(self, input_dim, output_dim, num_experts, dropout=0.0, noise=True):
         super().__init__()
-        self.experts = nn.ModuleList([ParametricWhiteningExpert(input_dim, output_dim) for _ in range(num_experts)])
-        self.gate = nn.Linear(input_dim, num_experts)
+        self.num_experts = num_experts
+        self.noisy_gating = noise
+        self.experts = nn.ModuleList([
+            ParametricWhiteningExpert(input_dim, output_dim, dropout)
+            for _ in range(num_experts)
+        ])
+        self.w_gate = nn.Parameter(torch.zeros(input_dim, num_experts))
+        self.w_noise = nn.Parameter(torch.zeros(input_dim, num_experts))
+
+    def noisy_top_k_gating(self, x, train, noise_epsilon=1e-2):
+        clean_logits = x @ self.w_gate
+        if self.noisy_gating and train:
+            raw_noise_stddev = x @ self.w_noise
+            noise_stddev = F.softplus(raw_noise_stddev) + noise_epsilon
+            logits = clean_logits + torch.randn_like(clean_logits) * noise_stddev
+        else:
+            logits = clean_logits
+        return F.softmax(logits, dim=-1)
 
     def forward(self, x):
+        gates = self.noisy_top_k_gating(x, self.training)
         experts = torch.stack([expert(x) for expert in self.experts], dim=-2)
-        weights = F.softmax(self.gate(x), dim=-1).unsqueeze(-1)
-        return (experts * weights).sum(dim=-2)
+        return (gates.unsqueeze(-1) * experts).sum(dim=-2)
 
 
 class UniSRec(SASRec):
@@ -42,7 +64,7 @@ class UniSRec(SASRec):
     ):
         super().__init__(num_items, hidden_size, max_seq_len, num_layers, num_heads, dropout)
         self.use_id_embedding = use_id_embedding
-        self.text_item_encoder = MoEAdaptor(text_emb_dim, hidden_size, num_experts)
+        self.text_item_encoder = MoEAdaptor(text_emb_dim, hidden_size, num_experts, dropout)
         self.item_embedding = nn.Embedding(num_items + 1, hidden_size, padding_idx=0) if use_id_embedding else None
 
     def encode_text_items(self, text_embs):

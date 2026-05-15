@@ -13,6 +13,7 @@ def train_pretrain(model, dataloader, optimizer, device, epochs=10, tau=0.07, la
         steps = 0
         for batch in dataloader:
             seq_ids = batch["item_seq_ids"].to(device)
+            pos_ids = batch["pos_ids"].to(device)
             aug_ids = batch["aug_seq_ids"].to(device)
             seq_text = batch["item_seq_text_embs"].to(device)
             pos_text = batch["pos_text_embs"].to(device)
@@ -21,7 +22,7 @@ def train_pretrain(model, dataloader, optimizer, device, epochs=10, tau=0.07, la
             seq_emb = last_hidden(model(seq_text, seq_ids), seq_ids)
             aug_emb = last_hidden(model(aug_text, aug_ids), aug_ids)
             pos_emb = model.encode_text_items(pos_text)
-            loss = pretrain_loss(seq_emb, pos_emb, aug_emb, tau, lambda_ss)
+            loss = pretrain_loss(seq_emb, pos_emb, aug_emb, pos_ids, tau, lambda_ss)
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()

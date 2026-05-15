@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from utils import last_hidden
 
@@ -30,17 +31,17 @@ def update_metrics(scores, target_ids, metrics, top_ks):
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, item_text_embs, device, top_ks=(10, 50), item_batch_size=4096):
+def evaluate(model, dataloader, item_text_embs, device, top_ks=(10, 50), item_batch_size=4096, tau=0.07):
     model.to(device)
     model.eval()
-    item_embs = encode_all_items(model, item_text_embs, device, item_batch_size)
+    item_embs = F.normalize(encode_all_items(model, item_text_embs, device, item_batch_size), dim=-1)
     metrics = {name: 0.0 for k in top_ks for name in (f"Recall@{k}", f"NDCG@{k}")}
     total = 0
     for batch in dataloader:
         seq_ids = batch["item_seq_ids"].to(device)
         seq_text = batch["item_seq_text_embs"].to(device)
         target_ids = batch["target_ids"].to(device)
-        seq_emb = last_hidden(model(seq_text, seq_ids), seq_ids)
-        scores = seq_emb @ item_embs.T
+        seq_emb = F.normalize(last_hidden(model(seq_text, seq_ids), seq_ids), dim=-1)
+        scores = seq_emb @ item_embs.T / tau
         total += update_metrics(scores, target_ids, metrics, top_ks)
     return {k: v / max(total, 1) for k, v in metrics.items()}

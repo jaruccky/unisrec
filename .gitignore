@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Data
+data/
+*.csv
+*.jsonl
+*.json.gz
+*.gz
+*.zip
+*.rar
+*.tar
+*.tar.gz
+
+# Model checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+
+# Results / outputs
+results/
+outputs/
+runs/
+wandb/
+tensorboard/
+lightning_logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Kaggle
+kaggle.json
+
+# Temporary files
+tmp/
+temp/
+*.part

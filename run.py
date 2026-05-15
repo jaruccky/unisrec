@@ -117,7 +117,17 @@ def cmd_finetune(args):
     dataset = FinetuneDataset(pack["train_samples"], pack["item_text_embs"], pack["num_items"], args.num_negatives)
     loader = DataLoader(dataset, args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=dataset.collate_fn, pin_memory=args.device.startswith("cuda"))
     optimizer = torch.optim.Adam(trainable_parameters(model), lr=args.lr)
-    train_finetune(model, loader, optimizer, args.device, args.epochs, args.grad_clip)
+    train_finetune(
+        model,
+        loader,
+        optimizer,
+        args.device,
+        epochs=args.epochs,
+        tau=args.tau,
+        item_text_embs=pack["item_text_embs"],
+        full_sort=not args.sampled_finetune,
+        grad_clip=args.grad_clip,
+    )
     save_checkpoint(args.save, model, config)
     print(args.save)
 
@@ -130,7 +140,7 @@ def cmd_eval(args):
     load_state(model, ckpt, strict=False)
     dataset = EvalDataset(pack[f"{args.split}_samples"], pack["item_text_embs"])
     loader = DataLoader(dataset, args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=dataset.collate_fn, pin_memory=args.device.startswith("cuda"))
-    metrics = evaluate(model, loader, pack["item_text_embs"], args.device, tuple(args.top_k), args.item_batch_size)
+    metrics = evaluate(model, loader, pack["item_text_embs"], args.device, tuple(args.top_k), args.item_batch_size, args.tau)
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
 
 
@@ -181,6 +191,8 @@ def build_parser():
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--num_negatives", type=int, default=100)
+    p.add_argument("--tau", type=float, default=0.07)
+    p.add_argument("--sampled_finetune", action="store_true")
     p.add_argument("--grad_clip", type=float, default=None)
     p.add_argument("--train_all", action="store_true")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -195,6 +207,7 @@ def build_parser():
     p.add_argument("--num_workers", type=int, default=0)
     p.add_argument("--top_k", type=int, nargs="+", default=[10, 50])
     p.add_argument("--item_batch_size", type=int, default=4096)
+    p.add_argument("--tau", type=float, default=0.07)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     add_model_args(p)
     p.set_defaults(func=cmd_eval)
