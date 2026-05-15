@@ -10,6 +10,7 @@ from finetune import configure_finetune, train_finetune, trainable_parameters
 from model import UniSRec
 from prepare_data import prepare_amazon, prepare_or
 from pretrain import train_pretrain
+from train_sasrec import run_sasrec
 from utils import checkpoint_config, load_state, safe_load, save_checkpoint
 
 
@@ -20,6 +21,13 @@ def add_model_args(p):
     p.add_argument("--num_experts", type=int, default=8)
     p.add_argument("--dropout", type=float, default=0.2)
     p.add_argument("--use_id_embedding", action="store_true")
+
+
+def add_sasrec_model_args(p):
+    p.add_argument("--hidden_size", type=int, default=64)
+    p.add_argument("--num_layers", type=int, default=2)
+    p.add_argument("--num_heads", type=int, default=2)
+    p.add_argument("--dropout", type=float, default=0.2)
 
 
 def model_config(args, pack):
@@ -211,6 +219,23 @@ def build_parser():
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     add_model_args(p)
     p.set_defaults(func=cmd_eval)
+
+    p = sub.add_parser("sasrec")
+    p.add_argument("--mode", choices=["train", "eval"], required=True)
+    p.add_argument("--data", required=True)
+    p.add_argument("--ckpt", default=None)
+    p.add_argument("--save", default="sasrec.pt")
+    p.add_argument("--batch_size", type=int, default=256)
+    p.add_argument("--num_workers", type=int, default=0)
+    p.add_argument("--epochs", type=int, default=10)
+    p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--num_negatives", type=int, default=100)
+    p.add_argument("--grad_clip", type=float, default=None)
+    p.add_argument("--split", choices=["valid", "test"], default="test")
+    p.add_argument("--top_k", type=int, nargs="+", default=[10, 50])
+    p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    add_sasrec_model_args(p)
+    p.set_defaults(func=run_sasrec)
 
     return parser
 
