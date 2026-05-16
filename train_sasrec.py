@@ -1,4 +1,6 @@
 import json
+import time
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -7,6 +9,40 @@ from datasets import FinetuneDataset, EvalDataset
 from loss import sampled_ce_loss
 from model_sasrec import SASRec
 from utils import safe_load, load_state, save_checkpoint, checkpoint_config, last_hidden
+
+
+def save_eval_result(results_dir, args, metrics, config):
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    data_name = Path(args.data).parent.name or Path(args.data).stem
+    ckpt_name = Path(args.ckpt).stem if args.ckpt else "no_ckpt"
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+    payload = {
+        "model": "sasrec",
+        "data": args.data,
+        "checkpoint": args.ckpt,
+        "split": args.split,
+        "top_k": list(args.top_k),
+        "batch_size": args.batch_size,
+        "metrics": metrics,
+        "config": config,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    path = results_dir / f"sasrec_{data_name}_{args.split}_{ckpt_name}_{timestamp}.json"
+    latest_path = results_dir / f"latest_sasrec_{data_name}_{args.split}.json"
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    print(f"saved eval result: {path}", flush=True)
+    print(f"saved latest eval result: {latest_path}", flush=True)
+    return path
 
 
 def run_sasrec(args):
@@ -164,6 +200,7 @@ def run_sasrec(args):
         metrics = {k: v / max(total, 1) for k, v in metrics.items()}
 
         print(json.dumps(metrics, ensure_ascii=False, indent=2))
+        save_eval_result(args.results_dir, args, metrics, config)
         return metrics
 
     raise RuntimeError(f"Неизвестный mode: {args.mode}")

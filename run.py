@@ -1,5 +1,7 @@
 import argparse
 import json
+import time
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -64,6 +66,41 @@ def load_pack(path):
     if "item_text_embs" not in pack:
         raise RuntimeError("data.pt должен содержать item_text_embs")
     return pack
+
+
+def save_eval_result(results_dir, model_name, args, metrics, config=None):
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    data_name = Path(args.data).parent.name or Path(args.data).stem
+    ckpt_name = Path(args.ckpt).stem if getattr(args, "ckpt", None) else "no_ckpt"
+    split = getattr(args, "split", "unknown")
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+    payload = {
+        "model": model_name,
+        "data": args.data,
+        "checkpoint": getattr(args, "ckpt", None),
+        "split": split,
+        "top_k": list(getattr(args, "top_k", [])),
+        "batch_size": getattr(args, "batch_size", None),
+        "metrics": metrics,
+        "config": config or {},
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    path = results_dir / f"{model_name}_{data_name}_{split}_{ckpt_name}_{timestamp}.json"
+    latest_path = results_dir / f"latest_{model_name}_{data_name}_{split}.json"
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    with open(latest_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    print(f"saved eval result: {path}", flush=True)
+    print(f"saved latest eval result: {latest_path}", flush=True)
+    return path
 
 
 def cmd_prepare(args):
@@ -150,6 +187,7 @@ def cmd_eval(args):
     loader = DataLoader(dataset, args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=dataset.collate_fn, pin_memory=args.device.startswith("cuda"))
     metrics = evaluate(model, loader, pack["item_text_embs"], args.device, tuple(args.top_k), args.item_batch_size, args.tau)
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
+    save_eval_result(args.results_dir, "unisrec", args, metrics, config)
 
 
 def build_parser():
@@ -217,6 +255,7 @@ def build_parser():
     p.add_argument("--item_batch_size", type=int, default=4096)
     p.add_argument("--tau", type=float, default=0.07)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--results_dir", default="results")
     add_model_args(p)
     p.set_defaults(func=cmd_eval)
 
@@ -234,6 +273,7 @@ def build_parser():
     p.add_argument("--split", choices=["valid", "test"], default="test")
     p.add_argument("--top_k", type=int, nargs="+", default=[10, 50])
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--results_dir", default="results")
     add_sasrec_model_args(p)
     p.set_defaults(func=run_sasrec)
 
